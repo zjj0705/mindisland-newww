@@ -1,0 +1,1433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>房树人 MindIsland</title>
+  <style>
+    /* —— 设计令牌 —— */
+    :root {
+      --paper: #FDF8EF;
+      --paper-warm: #F8F1E7;
+      --ink: #3E3A39;
+      --ink-soft: #6B6563;
+      --ink-muted: #A39B98;
+      --line: #E8E0D5;
+      --warm-yellow: #F3D58A;
+      --sage-green: #AFC8AD;
+      --fog-blue: #9FBFD0;
+      --coral: #E9AFA3;
+      --danger: #D49B9B;
+      --radius: 22px;
+      --radius-sm: 12px;
+      --touch-min: 44px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--paper-warm);
+      color: var(--ink);
+      min-height: 100vh;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .app-shell {
+      width: 100%;
+      max-width: 500px;
+      margin: 0 auto;
+      min-height: 100vh;
+      background: var(--paper);
+      position: relative;
+      overflow: hidden;
+    }
+    @media (min-width: 768px) {
+      .app-shell {
+        max-width: 480px;
+        min-height: 90vh;
+        border-radius: 32px;
+        margin: 24px auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.12);
+      }
+    }
+    .step { display: none; padding: 24px 20px; min-height: 100%; flex-direction: column; }
+    .step.active { display: flex; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 14px 28px; border: none; border-radius: var(--radius-sm);
+      font-size: 16px; font-weight: 600; cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s; min-height: var(--touch-min);
+      font-family: inherit;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn-primary { background: var(--sage-green); color: white; }
+    .btn-secondary { background: var(--paper-warm); color: var(--ink); border: 1px solid var(--line); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Step 1 */
+    #step-home { align-items: center; justify-content: center; text-align: center; gap: 24px; }
+    .logo { font-size: 28px; font-weight: 700; letter-spacing: 2px; color: var(--ink); }
+    .subtitle { font-size: 14px; color: var(--ink-soft); line-height: 1.6; }
+    .lamp-svg { width: 120px; height: 120px; animation: breathe 3s ease-in-out infinite; }
+    @keyframes breathe { 0%,100%{transform:scale(1);opacity:0.9;} 50%{transform:scale(1.05);opacity:1;} }
+
+    /* Step 2 */
+    #step-canvas { gap: 12px; }
+    .canvas-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .canvas-title { font-size: 18px; font-weight: 600; }
+    .canvas-wrap {
+      position: relative; width: 100%; aspect-ratio: 4 / 3;
+      background: white; border-radius: var(--radius-sm);
+      border: 1px solid var(--line); overflow: hidden;
+    }
+    #drawingCanvas, #groundingCanvas {
+      width: 100%; height: 100%; display: block;
+      touch-action: none; cursor: crosshair;
+    }
+    .grounding-overlay { position: absolute; pointer-events: none; }
+    .toolbar {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      padding: 8px; background: var(--paper-warm); border-radius: var(--radius-sm);
+    }
+    .tool-btn {
+      width: 40px; height: 40px; border: 1px solid var(--line);
+      border-radius: 8px; background: white; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; transition: background 0.2s;
+    }
+    .tool-btn.active { background: var(--coral); color: white; }
+    .color-palette { display: flex; gap: 6px; flex-wrap: wrap; }
+    .color-dot {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 2px solid transparent; cursor: pointer; transition: transform 0.1s;
+    }
+    .color-dot.active { border-color: var(--ink); transform: scale(1.15); }
+    .size-options { display: flex; gap: 6px; }
+    .size-dot {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 1px solid var(--line); background: white; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .size-dot.active { border-color: var(--sage-green); }
+    .size-dot .inner { border-radius: 50%; background: var(--ink); }
+
+    .inspire-row { display: flex; gap: 8px; margin-top: 10px; }
+    .btn-inspire {
+      flex: 1; background: var(--warm-yellow); color: var(--ink);
+      padding: 12px 16px; border: none; border-radius: var(--radius-sm);
+      font-weight: 600; font-size: 14px; cursor: pointer;
+      font-family: inherit; min-height: var(--touch-min);
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn-inspire:active { transform: scale(0.96); }
+    .btn-inspire:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* SuggestionRail 抽屉 */
+    .rail-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 50; }
+    .rail-backdrop.open { display: block; }
+    .rail-drawer {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--paper); border-radius: 24px 24px 0 0;
+      padding: 16px 16px 24px; box-shadow: 0 -8px 24px rgba(0,0,0,0.15);
+      transform: translateY(100%); transition: transform 0.3s ease;
+      z-index: 51; max-height: 70vh; display: flex; flex-direction: column;
+    }
+    .rail-drawer.open { transform: translateY(0); }
+    .rail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .rail-title { font-size: 16px; font-weight: 700; color: var(--ink); }
+    .rail-close {
+      width: 32px; height: 32px; border: none; background: var(--paper-warm);
+      border-radius: 50%; font-size: 18px; cursor: pointer; color: var(--ink-soft);
+    }
+    .rail-status { font-size: 13px; color: var(--ink-soft); margin-bottom: 10px; min-height: 18px; }
+    .rail-cards { display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 12px; -webkit-overflow-scrolling: touch; }
+    .rail-card {
+      flex: 0 0 140px; background: var(--paper-warm); border-radius: 14px;
+      overflow: hidden; border: 2px solid transparent; cursor: pointer;
+      transition: border 0.2s, transform 0.1s;
+    }
+    .rail-card:active { transform: scale(0.97); }
+    .rail-card.selected { border-color: var(--coral); }
+    .rail-card img { width: 140px; height: 140px; object-fit: cover; display: block; background: white; }
+    .rail-card .card-body { padding: 8px 10px; }
+    .rail-card .card-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+    .rail-card .card-desc { font-size: 11px; color: var(--ink-muted); line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .rail-skeleton {
+      flex: 0 0 140px; height: 200px;
+      background: linear-gradient(90deg, var(--paper-warm) 25%, var(--line) 50%, var(--paper-warm) 75%);
+      background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 14px;
+    }
+    @keyframes shimmer { 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
+    .rail-actions { display: flex; gap: 8px; margin-top: 8px; }
+    .rail-actions .btn { flex: 1; font-size: 14px; padding: 10px 14px; }
+    .preview-overlay { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+    .preview-overlay.open { display: block; }
+    .preview-overlay img { width: 100%; height: 100%; object-fit: contain; opacity: 0.65; }
+
+    /* Step 3: 对话 */
+    #step-dialogue { gap: 12px; }
+    .dialogue-area {
+      flex: 1; overflow-y: auto; display: flex; flex-direction: column;
+      gap: 10px; padding: 8px 0; max-height: 60vh;
+    }
+    .bubble {
+      max-width: 80%; padding: 12px 16px; border-radius: 16px;
+      font-size: 15px; line-height: 1.5; word-break: break-word;
+      animation: bubbleIn 0.3s ease;
+    }
+    @keyframes bubbleIn { from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:translateY(0);} }
+    .bubble-lamp { align-self: flex-start; background: var(--paper-warm); border: 1px solid var(--line); }
+    .bubble-user { align-self: flex-end; background: var(--sage-green); color: white; }
+    .typing-dots { display: inline-flex; gap: 4px; padding: 4px 0; }
+    .typing-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-muted); animation: typing 1.2s infinite; }
+    .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typing { 0%,60%,100%{opacity:0.3;} 30%{opacity:1;} }
+    .input-row { display: flex; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+    .chat-input {
+      flex: 1; padding: 12px 16px; border: 1px solid var(--line);
+      border-radius: 12px; font-size: 15px; font-family: inherit; outline: none;
+    }
+    .chat-input:focus { border-color: var(--sage-green); }
+
+    /* Step 4: 重构卡 */
+    #step-cards { gap: 12px; }
+    .cards-list { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+    .recon-card {
+      padding: 16px; background: var(--paper-warm);
+      border: 2px solid var(--line); border-radius: var(--radius);
+      cursor: pointer; transition: border-color 0.2s, transform 0.1s;
+    }
+    .recon-card:active { transform: scale(0.98); }
+    .recon-card.selected { border-color: var(--coral); }
+    .recon-card-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+    .recon-card-desc { font-size: 14px; color: var(--ink-soft); line-height: 1.5; }
+    .recon-card-hint { font-size: 13px; color: var(--coral); margin-top: 8px; font-style: italic; }
+
+    /* Step 5 */
+    #step-grounding { gap: 12px; }
+    .grounding-prompt {
+      padding: 12px 16px; background: var(--warm-yellow);
+      border-radius: var(--radius-sm); font-size: 14px; line-height: 1.5;
+    }
+
+    /* Step 6 */
+    #step-growth { align-items: center; gap: 20px; text-align: center; }
+    .growth-feedback {
+      padding: 20px; background: var(--paper-warm); border-radius: var(--radius);
+      font-size: 16px; line-height: 1.7; width: 100%;
+    }
+    .growth-points { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+    .growth-dot {
+      width: 60px; height: 60px; border-radius: 50%;
+      background: var(--paper); border: 2px solid var(--line);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; color: var(--ink-muted); opacity: 0.4; transition: all 0.4s;
+    }
+    .growth-dot.lit {
+      opacity: 1; background: var(--warm-yellow); border-color: var(--warm-yellow);
+      color: var(--ink); box-shadow: 0 0 12px rgba(243, 213, 138, 0.6);
+      animation: glowPulse 0.6s ease;
+    }
+    @keyframes glowPulse { 0%{transform:scale(0.8);} 50%{transform:scale(1.15);} 100%{transform:scale(1);} }
+    .growth-summary { font-size: 15px; color: var(--ink-soft); line-height: 1.6; font-style: italic; }
+
+    /* Loading + 错误 */
+    .loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px 0; }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid var(--line);
+      border-top-color: var(--sage-green); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 14px; color: var(--ink-soft); }
+    .error-box {
+      padding: 16px; background: #fef2f2; border: 1px solid var(--danger);
+      border-radius: var(--radius-sm); color: var(--danger); font-size: 14px; text-align: center;
+    }
+
+    /* HUD */
+    .hud { display: flex; gap: 4px; padding: 0 20px 12px; }
+    .hud-segment { flex: 1; height: 4px; border-radius: 2px; background: var(--line); transition: background 0.3s; }
+    .hud-segment.active { background: var(--sage-green); }
+    .hud-segment.current { background: var(--coral); }
+
+    @keyframes dash { to { stroke-dashoffset: -24; } }
+  </style>
+</head>
+<body>
+  <div class="app-shell" id="app">
+    <div class="hud" id="hud">
+      <div class="hud-segment" data-step="1"></div>
+      <div class="hud-segment" data-step="2"></div>
+      <div class="hud-segment" data-step="3"></div>
+      <div class="hud-segment" data-step="4"></div>
+      <div class="hud-segment" data-step="5"></div>
+      <div class="hud-segment" data-step="6"></div>
+    </div>
+
+    <!-- Step 1: 首页 -->
+    <div class="step active" id="step-home">
+      <div class="logo">房树人 MindIsland</div>
+      <svg class="lamp-svg" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="35" fill="#F3D58A" opacity="0.3">
+          <animate attributeName="r" values="35;40;35" dur="3s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="50" cy="50" r="20" fill="#F3D58A" opacity="0.6"/>
+        <circle cx="50" cy="50" r="10" fill="#F3D58A"/>
+        <text x="50" y="55" text-anchor="middle" font-size="14" fill="white">灯</text>
+      </svg>
+      <p class="subtitle">画一幅房树人，<br>让 AI 灯伴陪你看见自己。</p>
+      <button class="btn btn-primary" onclick="goStep(2)">开始今天的房树人</button>
+      <button class="btn btn-secondary" style="margin-top:8px;font-size:13px;padding:8px 16px;" onclick="runSelfCheck()">🔍 检测 AI 状态</button>
+      <div id="selfCheckResult" style="font-size:12px;color:var(--ink-soft);line-height:1.6;text-align:left;width:100%;max-width:340px;margin-top:8px;"></div>
+    </div>
+
+    <!-- Step 2: 手绘画布 -->
+    <div class="step" id="step-canvas">
+      <div class="canvas-header">
+        <span class="canvas-title">画一幅房树人</span>
+      </div>
+      <div class="canvas-wrap" style="position:relative;">
+        <canvas id="drawingCanvas"></canvas>
+        <div class="preview-overlay" id="previewOverlay">
+          <img id="previewImg" alt="AI 预览">
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="tool-btn active" data-tool="brush" onclick="setTool('brush')">✏️</button>
+        <button class="tool-btn" data-tool="eraser" onclick="setTool('eraser')">🧹</button>
+        <button class="tool-btn" onclick="undo()">↶</button>
+        <button class="tool-btn" onclick="clearCanvas()">🗑</button>
+        <div class="color-palette" id="colorPalette"></div>
+        <div class="size-options" id="sizeOptions"></div>
+      </div>
+      <div class="inspire-row">
+        <button class="btn-inspire" id="inspireBtn" onclick="triggerInspire()">✨ 给我灵感（AI 接力）</button>
+      </div>
+      <button class="btn btn-primary" id="submitDrawBtn" onclick="submitDrawing()">让 AI 看看</button>
+    </div>
+
+    <!-- SuggestionRail 抽屉 -->
+    <div class="rail-backdrop" id="railBackdrop" onclick="closeRail()"></div>
+    <div class="rail-drawer" id="railDrawer">
+      <div class="rail-header">
+        <span class="rail-title">✨ AI 灵感候选</span>
+        <button class="rail-close" onclick="closeRail()">×</button>
+      </div>
+      <div class="rail-status" id="railStatus">正在构思中...</div>
+      <div class="rail-cards" id="railCards"></div>
+      <div class="rail-actions" id="railActions" style="display:none;">
+        <button class="btn btn-secondary" onclick="cancelPreview()">取消</button>
+        <button class="btn btn-primary" onclick="applyPreview()">采用</button>
+      </div>
+    </div>
+
+    <!-- Step 3: 对话 -->
+    <div class="step" id="step-dialogue">
+      <div class="canvas-header">
+        <span class="canvas-title">和小灯聊聊</span>
+      </div>
+      <div class="dialogue-area" id="dialogueArea"></div>
+      <div class="input-row">
+        <input type="text" class="chat-input" id="chatInput" placeholder="和小灯说说话..."
+          onkeypress="if(event.key==='Enter')sendChat()">
+        <button class="btn btn-primary" id="sendBtn" onclick="sendChat()">发送</button>
+      </div>
+    </div>
+
+    <!-- Step 4: 重构卡 -->
+    <div class="step" id="step-cards">
+      <div class="canvas-header">
+        <span class="canvas-title">选一个改变的方向</span>
+      </div>
+      <div class="cards-list" id="cardsList"></div>
+    </div>
+
+    <!-- Step 5: grounding -->
+    <div class="step" id="step-grounding">
+      <div class="canvas-header">
+        <span class="canvas-title">在框里画一画</span>
+      </div>
+      <div class="grounding-prompt" id="groundingPrompt">AI 正在定位...</div>
+      <div class="canvas-wrap" style="position:relative;">
+        <canvas id="groundingCanvas"></canvas>
+        <svg class="grounding-overlay" id="groundingOverlay" style="width:100%;height:100%;position:absolute;top:0;left:0;"></svg>
+      </div>
+      <div class="toolbar">
+        <button class="tool-btn active" data-tool="brush" onclick="setGroundingTool('brush')">✏️</button>
+        <button class="tool-btn" onclick="undoGrounding()">↶</button>
+        <button class="tool-btn" onclick="clearGroundingCanvas()">🗑</button>
+        <div class="color-palette" id="groundingColorPalette"></div>
+      </div>
+      <button class="btn btn-primary" id="completeBtn" onclick="submitModification()">完成修改</button>
+    </div>
+
+    <!-- Step 6: 成长反馈 -->
+    <div class="step" id="step-growth">
+      <div class="canvas-header">
+        <span class="canvas-title">今天的成长</span>
+      </div>
+      <div id="growthContent">
+        <div class="loading">
+          <div class="spinner"></div>
+          <div class="loading-text">AI 正在看你的修改...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== 配置 ====================
+    // DashScope OpenAI 兼容端点（文本/视觉对话）+ 原生端点（图像生成）
+    const DASHSCOPE_API_KEY = 'sk-ws-H.EDIIEDD.iAZE.MEUCIQD1JrAMl2OumkNwW3QkeIG-hvU1q-umYhuvUSI7wnfEzwIgTH6-hoBD78e0yTQTi1YcasFaUnYkE5og6rE5IrSXjYk';
+    const CHAT_ENDPOINT = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+    const IMAGE_ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis';
+
+    // ==================== 全局状态 ====================
+    const state = {
+      step: 1,
+      originalCanvasData: null,   // Step 2 画作 DataURL（Step 5 参考）
+      dialogueHistory: [],       // [{role, content}, ...] 喂给对话 API
+      dialogueTurns: 0,
+      maxTurns: 3,
+      cards: [],
+      selectedCard: null,
+      grounding: null,
+      groundingImageBase64: null,  // Step 5 上传给 AI 的原图 base64
+      // SuggestionRail
+      currentSuggestions: [],
+      previewSuggestion: null,
+    };
+
+    const COLORS = ['#3E3A39', '#D49B9B', '#E9AFA3', '#F3D58A', '#AFC8AD', '#9FBFD0'];
+    const SIZES = [3, 6, 12];
+
+    // ==================== 通用工具 ====================
+    function canvasToBase64(canvas) {
+      return canvas.toDataURL('image/png').split(',')[1];
+    }
+    function canvasToBlob(canvas) {
+      return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    }
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    // ==================== DashScope API 封装 ====================
+
+    /**
+     * 文本对话（Qwen-VL-Max，OpenAI 兼容端点）。
+     * messages: [{role:'system'|'user'|'assistant', content:'...'}, ...]
+     * 返回 assistant 回复文本。
+     */
+    async function qwenTextChat(messages, { responseJson = false, timeoutMs = 30000 } = {}) {
+      let payloadMessages = messages;
+      if (responseJson) {
+        payloadMessages = messages.map(m => {
+          if (m.role === 'user' && !m.content.toLowerCase().includes('json')) {
+            return { ...m, content: m.content + '\n\n请仅输出严格的 JSON。' };
+          }
+          return m;
+        });
+      }
+      const payload = {
+        model: 'qwen-vl-max',
+        messages: payloadMessages,
+      };
+      if (responseJson) payload.response_format = { type: 'json_object' };
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const resp = await fetch(CHAT_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + DASHSCOPE_API_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(`DashScope ${resp.status}: ${text.slice(0, 200)}`);
+        }
+        const data = await resp.json();
+        const content = extractChatContent(data);
+        return content;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    /**
+     * 视觉对话（Qwen-VL-Max，OpenAI 兼容端点）。
+     * 看图回答。imageBase64: 不含 data: 前缀的 base64。
+     */
+    async function qwenVisionChat(messages, imageBase64, { responseJson = false, timeoutMs = 45000 } = {}) {
+      const dataUrl = `data:image/png;base64,${imageBase64}`;
+      const payloadMessages = [];
+      for (const m of messages) {
+        if (m.role === 'system') {
+          let c = m.content;
+          if (responseJson && !c.toLowerCase().includes('json')) c += '\n\n请仅输出严格的 JSON。';
+          payloadMessages.push({ role: 'system', content: c });
+        } else {
+          let t = m.content;
+          if (responseJson && !t.toLowerCase().includes('json')) t += '\n\n请仅输出严格的 JSON。';
+          payloadMessages.push({
+            role: m.role,
+            content: [
+              { type: 'text', text: t },
+              { type: 'image_url', image_url: { url: dataUrl } },
+            ],
+          });
+        }
+      }
+      const payload = {
+        model: 'qwen-vl-max',
+        messages: payloadMessages,
+      };
+      if (responseJson) payload.response_format = { type: 'json_object' };
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const resp = await fetch(CHAT_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + DASHSCOPE_API_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          throw new Error(`DashScope ${resp.status}: ${text.slice(0, 200)}`);
+        }
+        const data = await resp.json();
+        return extractChatContent(data);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function extractChatContent(data) {
+      const choices = data.choices || [];
+      if (!choices.length) return '';
+      const msg = choices[0].message || {};
+      let content = msg.content || '';
+      if (Array.isArray(content)) {
+        const parts = [];
+        for (const item of content) {
+          if (item && typeof item === 'object' && item.type === 'text') parts.push(item.text || '');
+          else if (typeof item === 'string') parts.push(item);
+        }
+        content = parts.join('');
+      }
+      return content;
+    }
+
+    function parseJsonResponse(text) {
+      if (!text) return {};
+      let s = text.trim();
+      if (s.startsWith('```')) {
+        s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      }
+      const start = s.indexOf('{');
+      const end = s.lastIndexOf('}');
+      if (start === -1 || end === -1 || end < start) return {};
+      try { return JSON.parse(s.slice(start, end + 1)); }
+      catch (e) { return {}; }
+    }
+
+    // ==================== AI 自检：首页一键检测 3 个 API ====================
+    async function runSelfCheck() {
+      const box = document.getElementById('selfCheckResult');
+      box.innerHTML = '检测中...';
+      const lines = [];
+
+      // 1) 文本对话
+      lines.push('① 文本对话 (Qwen-VL-Max) ...');
+      box.innerHTML = lines.join('<br>');
+      try {
+        const r = await qwenTextChat(
+          [{ role: 'user', content: '只回2个字：你好' }],
+          { timeoutMs: 20000 }
+        );
+        lines.pop();
+        lines.push('① 文本对话 ✓ 返回: ' + (r || '').slice(0, 30));
+      } catch (e) {
+        lines.pop();
+        lines.push('① 文本对话 ✗ ' + e.message.slice(0, 120));
+      }
+      box.innerHTML = lines.join('<br>');
+
+      // 2) 视觉对话（造一个 32x32 红色 PNG）
+      lines.push('② 视觉对话 ...');
+      box.innerHTML = lines.join('<br>');
+      try {
+        const redPng = await makeSolidRedPng();
+        const r = await qwenVisionChat(
+          [{ role: 'user', content: '图里什么颜色？只回2字' }],
+          redPng,
+          { timeoutMs: 25000 }
+        );
+        lines.pop();
+        lines.push('② 视觉对话 ✓ 返回: ' + (r || '').slice(0, 30));
+      } catch (e) {
+        lines.pop();
+        lines.push('② 视觉对话 ✗ ' + e.message.slice(0, 120));
+      }
+      box.innerHTML = lines.join('<br>');
+
+      // 3) 通义万相文生图（约 15s）
+      lines.push('③ 通义万相文生图 (生成+轮询，约15s) ...');
+      box.innerHTML = lines.join('<br>');
+      try {
+        const url = await generateImage('一幅房树人心理绘画，温暖柔和童趣绘本风插画，无文字', { timeoutMs: 60000 });
+        lines.pop();
+        lines.push('③ 通义万相文生图 ✓ ' + (url ? url.slice(0, 40) + '...' : '(空URL)'));
+      } catch (e) {
+        lines.pop();
+        lines.push('③ 通义万相文生图 ✗ ' + e.message.slice(0, 120));
+      }
+      box.innerHTML = lines.join('<br>');
+
+      // 4) 通义万相返回的 OSS 图片能否在浏览器加载（影响"采用"功能）
+      lines.push('④ OSS 图片浏览器加载 ...');
+      box.innerHTML = lines.join('<br>');
+      try {
+        const url2 = await generateImage('测试图，一个小红点', { timeoutMs: 60000 });
+        const ok = await new Promise(resolve => {
+          const img = new Image();
+          img.onload = () => resolve(true);
+          img.onerror = () => resolve(false);
+          setTimeout(() => resolve(false), 8000);
+          img.src = url2;
+        });
+        lines.pop();
+        lines.push(ok ? '④ OSS 图片加载 ✓ "采用"功能可用' : '④ OSS 图片加载 ✗ (跨域限制，部署公网域名后通常可恢复)');
+      } catch (e) {
+        lines.pop();
+        lines.push('④ OSS 图片加载 ✗ ' + e.message.slice(0, 80));
+      }
+      box.innerHTML = lines.join('<br>');
+      lines.push('（检测完成）');
+      box.innerHTML = lines.join('<br>');
+    }
+
+    // 造一个 32x32 纯红 PNG（用 canvas），返回 base64（不含 data: 前缀）
+    function makeSolidRedPng() {
+      const c = document.createElement('canvas');
+      c.width = 32; c.height = 32;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = 'rgb(255, 0, 0)';
+      ctx.fillRect(0, 0, 32, 32);
+      return c.toDataURL('image/png').split(',')[1];
+    }
+
+    /**
+     * 通义万相文生图。
+     * 通过 Netlify Function 代理调用，规避浏览器 CORS 限制。
+     * 异步任务：POST 创建 → 返回 task_id → 轮询 GET → 拿到图片 URL。
+     */
+    async function generateImage(prompt, { timeoutMs = 90000 } = {}) {
+      // 判断是否在 Netlify 上（用代理）；本地预览回退到直连（可能失败）
+      const isNetlify = location.hostname.endsWith('netlify.app');
+      const proxyBase = '/.netlify/functions/image-gen';
+
+      // 1. 创建任务
+      let createData;
+      if (isNetlify) {
+        const resp = await fetch(proxyBase, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create', prompt: prompt }),
+        });
+        if (!resp.ok) throw new Error(`代理创建任务失败 ${resp.status}`);
+        createData = await resp.json();
+      } else {
+        // 本地直连（CORS 可能失败）
+        const resp = await fetch(IMAGE_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + DASHSCOPE_API_KEY,
+            'Content-Type': 'application/json',
+            'X-DashScope-Async': 'enable',
+          },
+          body: JSON.stringify({
+            model: 'wan2.2-t2i-flash',
+            input: { prompt: prompt },
+            parameters: { n: 1, size: '512*512' },
+          }),
+        });
+        if (!resp.ok) {
+          const t = await resp.text().catch(() => '');
+          throw new Error(`生成图创建任务失败 ${resp.status}: ${t.slice(0, 200)}`);
+        }
+        createData = await resp.json();
+      }
+      const taskId = createData.output && createData.output.task_id;
+      if (!taskId) throw new Error('未拿到 task_id');
+
+      // 2. 轮询任务状态
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        await sleep(2000);
+        let statusData;
+        if (isNetlify) {
+          const resp = await fetch(proxyBase, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'status', taskId: taskId }),
+          });
+          if (!resp.ok) continue;
+          statusData = await resp.json();
+        } else {
+          const resp = await fetch(`https://dashscope.aliyuncs.com/api/v1/tasks/${taskId}`, {
+            method: 'GET',
+            headers: { 'Authorization': 'Bearer ' + DASHSCOPE_API_KEY },
+          });
+          if (!resp.ok) continue;
+          statusData = await resp.json();
+        }
+        const status = statusData.output && statusData.output.task_status;
+        if (status === 'SUCCEEDED') {
+          const results = (statusData.output.results || []);
+          if (results.length && results[0].url) return results[0].url;
+          throw new Error('任务成功但未返回图片');
+        }
+        if (status === 'FAILED') {
+          throw new Error('通义万相生成失败');
+        }
+      }
+      throw new Error('生成图片超时');
+    }
+
+    // ==================== 步骤路由 ====================
+    function goStep(n) {
+      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+      const map = {1:'home',2:'canvas',3:'dialogue',4:'cards',5:'grounding',6:'growth'};
+      const target = document.getElementById(`step-${map[n]}`);
+      if (target) target.classList.add('active');
+      state.step = n;
+      updateHUD();
+      window.scrollTo(0, 0);
+      if (n === 2) {
+        requestAnimationFrame(() => initDrawingCanvas());
+      }
+    }
+
+    function updateHUD() {
+      const idx = state.step - 1;
+      document.querySelectorAll('.hud-segment').forEach((seg, i) => {
+        seg.classList.remove('active', 'current');
+        if (i < idx) seg.classList.add('active');
+        if (i === idx) seg.classList.add('current');
+      });
+    }
+
+    // ==================== Step 2: 手绘画布 ====================
+    let drawCanvas, drawCtx;
+    let currentTool = 'brush';
+    let currentColor = COLORS[0];
+    let currentSize = SIZES[1];
+    let undoStack = [];
+    let isDrawing = false;
+
+    function initDrawingCanvas() {
+      drawCanvas = document.getElementById('drawingCanvas');
+      if (!drawCanvas) return;
+      const wrap = drawCanvas.parentElement;
+      const w = wrap.clientWidth, h = wrap.clientHeight;
+      if (w === 0 || h === 0) return;
+      if (drawCanvas.width === w && drawCanvas.height === h && drawCtx) return;
+      drawCanvas.width = w; drawCanvas.height = h;
+      drawCtx = drawCanvas.getContext('2d');
+      drawCtx.lineCap = 'round'; drawCtx.lineJoin = 'round';
+      drawCtx.fillStyle = 'white';
+      drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+      if (!drawCanvas._eventsBound) {
+        drawCanvas.addEventListener('pointerdown', startDraw);
+        drawCanvas.addEventListener('pointermove', draw);
+        drawCanvas.addEventListener('pointerup', endDraw);
+        drawCanvas.addEventListener('pointerleave', endDraw);
+        drawCanvas.addEventListener('pointercancel', endDraw);
+        drawCanvas._eventsBound = true;
+      }
+    }
+
+    function startDraw(e) {
+      e.preventDefault();
+      drawCanvas.setPointerCapture(e.pointerId);
+      isDrawing = true;
+      pushUndo();
+      drawCtx.beginPath();
+      const rect = drawCanvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (drawCanvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (drawCanvas.height / rect.height);
+      drawCtx.moveTo(x, y);
+    }
+    function draw(e) {
+      if (!isDrawing) return;
+      e.preventDefault();
+      const rect = drawCanvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (drawCanvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (drawCanvas.height / rect.height);
+      if (currentTool === 'eraser') {
+        drawCtx.globalCompositeOperation = 'destination-out';
+        drawCtx.strokeStyle = 'rgba(0,0,0,1)';
+      } else {
+        drawCtx.globalCompositeOperation = 'source-over';
+        drawCtx.strokeStyle = currentColor;
+      }
+      drawCtx.lineWidth = currentSize;
+      drawCtx.lineTo(x, y);
+      drawCtx.stroke();
+    }
+    function endDraw(e) {
+      if (!isDrawing) return;
+      isDrawing = false;
+      if (e && e.pointerId !== undefined) {
+        try { drawCanvas.releasePointerCapture(e.pointerId); } catch(_) {}
+      }
+    }
+    function pushUndo() {
+      try {
+        undoStack.push(drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height));
+        if (undoStack.length > 30) undoStack.shift();
+      } catch(e) {}
+    }
+    function undo() {
+      if (undoStack.length > 0) drawCtx.putImageData(undoStack.pop(), 0, 0);
+    }
+    function clearCanvas() {
+      pushUndo();
+      drawCtx.fillStyle = 'white';
+      drawCtx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
+    }
+    function setTool(tool) {
+      currentTool = tool;
+      document.querySelectorAll('#step-canvas .tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+      document.querySelector(`#step-canvas .tool-btn[data-tool="${tool}"]`).classList.add('active');
+    }
+    function initColorPalette(containerId) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+      COLORS.forEach((c, i) => {
+        const dot = document.createElement('div');
+        dot.className = 'color-dot' + (i === 0 ? ' active' : '');
+        dot.style.background = c;
+        dot.onclick = () => {
+          currentColor = c;
+          container.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+          dot.classList.add('active');
+        };
+        container.appendChild(dot);
+      });
+    }
+    function initSizeOptions() {
+      const container = document.getElementById('sizeOptions');
+      container.innerHTML = '';
+      SIZES.forEach((s, i) => {
+        const dot = document.createElement('div');
+        dot.className = 'size-dot' + (i === 1 ? ' active' : '');
+        const inner = document.createElement('div');
+        inner.className = 'inner';
+        inner.style.width = s + 'px'; inner.style.height = s + 'px';
+        dot.appendChild(inner);
+        dot.onclick = () => {
+          currentSize = s;
+          container.querySelectorAll('.size-dot').forEach(d => d.classList.remove('active'));
+          dot.classList.add('active');
+        };
+        container.appendChild(dot);
+      });
+    }
+
+    // ==================== Step 2: AI 灵感（SuggestionRail） ====================
+    function openRail() {
+      document.getElementById('railBackdrop').classList.add('open');
+      document.getElementById('railDrawer').classList.add('open');
+    }
+    function closeRail() {
+      document.getElementById('railBackdrop').classList.remove('open');
+      document.getElementById('railDrawer').classList.remove('open');
+    }
+
+    /** 触发 AI 灵感：让 Qwen-VL-Max 看你的画，生成 4 张文字灵感卡。 */
+    async function triggerInspire() {
+      const btn = document.getElementById('inspireBtn');
+      btn.disabled = true;
+      btn.textContent = '✨ AI 接力中...';
+
+      openRail();
+      const statusEl = document.getElementById('railStatus');
+      const cardsEl = document.getElementById('railCards');
+      const actionsEl = document.getElementById('railActions');
+      actionsEl.style.display = 'none';
+      cardsEl.innerHTML = '';
+      statusEl.textContent = 'AI 正在看你的画，构思 4 个修改方向...（约 10-20 秒）';
+      // 4 个骨架屏
+      for (let i = 0; i < 4; i++) {
+        const sk = document.createElement('div');
+        sk.className = 'rail-skeleton';
+        cardsEl.appendChild(sk);
+      }
+
+      try {
+        // 让 AI 看画生成 4 个修改灵感
+        const base64 = canvasToBase64(drawCanvas);
+        const systemPrompt = '你是"小灯"，AI 绘画陪伴者。用户画了一幅房树人。请看画后，为用户生成 4 个温柔的小修改灵感，每个灵感是一个具体的画面改动建议，帮用户让画面更完整、更有温度。只输出 JSON：{"suggestions":[{"title":"4字以内标题","desc":"20字以内具体修改建议","icon":"warmth|growth|sky|light"}共4个]}。icon 从 warmth(温暖感)/growth(生长感)/sky(想象感)/light(光亮感) 里选，每个不同。';
+        const userPrompt = '请看我的画，给我 4 个修改灵感。';
+        const text = await qwenVisionChat(
+          [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          base64,
+          { responseJson: true, timeoutMs: 45000 }
+        );
+        const data = parseJsonResponse(text);
+        let suggestions = (data.suggestions || []).slice(0, 4);
+
+        // 兜底：AI 失败或返回不够 4 张
+        const fallback = [
+          { title: '暖光', desc: '给窗户加一束暖光', icon: 'light' },
+          { title: '新芽', desc: '树旁加一棵小树苗', icon: 'growth' },
+          { title: '星空', desc: '天空加月亮和小星星', icon: 'sky' },
+          { title: '牵手', desc: '让人朝房子走一步', icon: 'warmth' },
+        ];
+        while (suggestions.length < 4) {
+          suggestions.push(fallback[suggestions.length]);
+        }
+
+        // 给每个灵感配一个 SVG 示意图
+        suggestions = suggestions.map((s, i) => ({
+          id: 'sg-' + i,
+          title: s.title || fallback[i].title,
+          description: s.desc || fallback[i].desc,
+          icon: s.icon || fallback[i].icon,
+          svgUrl: makeInspireSvg(s.icon || fallback[i].icon, i),
+        }));
+
+        state.currentSuggestions = suggestions;
+        statusEl.textContent = '✨ 看看 AI 给你的修改灵感，点一张叠加到画布上参考';
+        renderSuggestionCards(suggestions);
+      } catch (e) {
+        statusEl.innerHTML = 'AI 暂时思考不出，已为你准备了 4 个默认灵感<br><span style="color:#A39B98;font-size:11px;">' + (e.message || '').slice(0, 100) + '</span>';
+        const fallback = [
+          { title: '暖光', desc: '给窗户加一束暖光', icon: 'light' },
+          { title: '新芽', desc: '树旁加一棵小树苗', icon: 'growth' },
+          { title: '星空', desc: '天空加月亮和小星星', icon: 'sky' },
+          { title: '牵手', desc: '让人朝房子走一步', icon: 'warmth' },
+        ];
+        const suggestions = fallback.map((s, i) => ({
+          id: 'sg-' + i,
+          title: s.title,
+          description: s.desc,
+          icon: s.icon,
+          svgUrl: makeInspireSvg(s.icon, i),
+        }));
+        state.currentSuggestions = suggestions;
+        renderSuggestionCards(suggestions);
+      }
+      btn.disabled = false;
+      btn.textContent = '✨ 再来一次';
+    }
+
+    // 4 种风格的简笔画 SVG 示意图（data URL，不依赖网络）
+    function makeInspireSvg(icon, seed) {
+      const palettes = {
+        light:   { bg: '#FFF8E7', stroke: '#3E3A39', accent: '#F3D58A', label: '暖光' },
+        growth:  { bg: '#F0F5EE', stroke: '#3E3A39', accent: '#AFC8AD', label: '生长' },
+        sky:     { bg: '#EEF4F8', stroke: '#3E3A39', accent: '#9FBFD0', label: '想象' },
+        warmth:  { bg: '#FCEFE9', stroke: '#3E3A39', accent: '#E9AFA3', label: '温暖' },
+      };
+      const p = palettes[icon] || palettes.light;
+      let extra = '';
+      if (icon === 'light') {
+        // 窗户暖光
+        extra = `
+          <rect x="195" y="310" width="22" height="22" fill="#FFE9A0" stroke="${p.stroke}" stroke-width="2"/>
+          <rect x="290" y="310" width="22" height="22" fill="#FFE9A0" stroke="${p.stroke}" stroke-width="2"/>
+          <circle cx="206" cy="321" r="3" fill="#FFF" opacity="0.8"/>
+          <circle cx="301" cy="321" r="3" fill="#FFF" opacity="0.8"/>
+          <path d="M 190 305 L 220 305 M 190 335 L 220 335 M 190 305 L 190 335 M 220 305 L 220 335" stroke="${p.accent}" stroke-width="1.5" opacity="0.6" stroke-dasharray="2,2"/>
+        `;
+      } else if (icon === 'growth') {
+        // 小树苗
+        extra = `
+          <rect x="130" y="420" width="6" height="30" fill="${p.stroke}"/>
+          <circle cx="133" cy="415" r="14" fill="${p.accent}" stroke="${p.stroke}" stroke-width="2"/>
+          <circle cx="120" cy="408" r="8" fill="${p.accent}" stroke="${p.stroke}" stroke-width="1.5"/>
+          <circle cx="146" cy="408" r="8" fill="${p.accent}" stroke="${p.stroke}" stroke-width="1.5"/>
+        `;
+      } else if (icon === 'sky') {
+        // 月亮和星星
+        extra = `
+          <circle cx="420" cy="100" r="20" fill="${p.accent}" opacity="0.8"/>
+          <circle cx="412" cy="92" r="14" fill="${p.bg}"/>
+          <circle cx="80" cy="80" r="3" fill="${p.accent}"/>
+          <circle cx="150" cy="60" r="2" fill="${p.accent}"/>
+          <circle cx="220" cy="90" r="2.5" fill="${p.accent}"/>
+          <circle cx="350" cy="70" r="2" fill="${p.accent}"/>
+          <circle cx="460" cy="140" r="2.5" fill="${p.accent}"/>
+        `;
+      } else if (icon === 'warmth') {
+        // 人朝房子走一步
+        extra = `
+          <circle cx="340" cy="285" r="14" fill="${p.bg}" stroke="${p.stroke}" stroke-width="3"/>
+          <line x1="340" y1="299" x2="340" y2="350" stroke="${p.stroke}" stroke-width="3"/>
+          <line x1="340" y1="315" x2="325" y2="335" stroke="${p.stroke}" stroke-width="2"/>
+          <line x1="340" y1="315" x2="355" y2="335" stroke="${p.stroke}" stroke-width="2"/>
+          <line x1="340" y1="350" x2="328" y2="390" stroke="${p.stroke}" stroke-width="3"/>
+          <line x1="340" y1="350" x2="355" y2="390" stroke="${p.stroke}" stroke-width="3"/>
+          <!-- 箭头表示朝房子走 -->
+          <path d="M 360 380 Q 330 365 310 350" stroke="${p.accent}" stroke-width="2" fill="none" stroke-dasharray="3,3"/>
+          <polygon points="310,350 316,348 313,355" fill="${p.accent}"/>
+        `;
+      }
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="280" height="280">
+        <rect width="512" height="512" fill="${p.bg}"/>
+        <!-- 房子轮廓（淡） -->
+        <rect x="180" y="280" width="150" height="170" fill="none" stroke="${p.stroke}" stroke-width="3" opacity="0.5"/>
+        <polygon points="170,285 255,200 340,285" fill="none" stroke="${p.stroke}" stroke-width="3" opacity="0.5"/>
+        <rect x="225" y="350" width="55" height="100" fill="none" stroke="${p.stroke}" stroke-width="3" opacity="0.5"/>
+        ${extra}
+        <text x="256" y="490" text-anchor="middle" font-size="18" fill="${p.stroke}" font-family="sans-serif">${p.label}</text>
+      </svg>`;
+      const b64 = btoa(unescape(encodeURIComponent(svg)));
+      return 'data:image/svg+xml;base64,' + b64;
+    }
+
+    function renderSuggestionCards(suggestions) {
+      const cardsEl = document.getElementById('railCards');
+      cardsEl.innerHTML = '';
+      suggestions.forEach(s => {
+        const card = document.createElement('div');
+        card.className = 'rail-card';
+        card.dataset.id = s.id;
+        const img = document.createElement('img');
+        img.src = s.svgUrl;
+        img.alt = s.title;
+        const body = document.createElement('div');
+        body.className = 'card-body';
+        const title = document.createElement('div');
+        title.className = 'card-title';
+        title.textContent = s.title;
+        const desc = document.createElement('div');
+        desc.className = 'card-desc';
+        desc.textContent = s.description;
+        body.appendChild(title); body.appendChild(desc);
+        card.appendChild(img); card.appendChild(body);
+        card.onclick = () => previewSuggestionCard(s, card);
+        cardsEl.appendChild(card);
+      });
+    }
+
+    function previewSuggestionCard(s, cardEl) {
+      state.previewSuggestion = s;
+      document.querySelectorAll('.rail-card').forEach(c => c.classList.remove('selected'));
+      cardEl.classList.add('selected');
+      const overlay = document.getElementById('previewOverlay');
+      const img = document.getElementById('previewImg');
+      img.src = s.svgUrl;
+      overlay.classList.add('open');
+      document.getElementById('railActions').style.display = 'flex';
+    }
+    function cancelPreview() {
+      state.previewSuggestion = null;
+      document.getElementById('previewOverlay').classList.remove('open');
+      document.getElementById('railActions').style.display = 'none';
+      document.querySelectorAll('.rail-card').forEach(c => c.classList.remove('selected'));
+    }
+    async function applyPreview() {
+      if (!state.previewSuggestion) return;
+      const s = state.previewSuggestion;
+      const img = new Image();
+      img.onload = () => {
+        pushUndo();
+        const cw = drawCanvas.width, ch = drawCanvas.height;
+        const targetW = cw * 0.7;
+        const targetH = (img.height / img.width) * targetW;
+        const dx = (cw - targetW) / 2, dy = (ch - targetH) / 2;
+        drawCtx.globalAlpha = 0.55;
+        drawCtx.drawImage(img, dx, dy, targetW, targetH);
+        drawCtx.globalAlpha = 1.0;
+        cancelPreview();
+        closeRail();
+        document.getElementById('inspireBtn').textContent = '✨ 再来一次';
+      };
+      img.onerror = () => { alert('示意图加载失败'); };
+      img.src = s.svgUrl;
+    }
+
+    // ==================== Step 2 → Step 3: 让 AI 看看 ====================
+    async function submitDrawing() {
+      const btn = document.getElementById('submitDrawBtn');
+      btn.disabled = true;
+      btn.textContent = 'AI 正在看...';
+      try {
+        // 保存原图
+        state.originalCanvasData = drawCanvas.toDataURL('image/png');
+        const base64 = canvasToBase64(drawCanvas);
+
+        // 调 Qwen-VL-Max 看画，生成第一轮对话
+        const systemPrompt = '你是"小灯"，一个温暖、共情的 AI 陪伴者。用户画了一幅房树人心理画。请用温柔简短的语言，像和朋友聊天一样，向用户描述你看到了什么，并轻轻邀请他聊聊。控制在 60 字以内。不要评判、不要分析、不要建议。';
+        const userPrompt = '这是我画的房树人，请温柔地回应我。';
+        const firstTurn = await qwenVisionChat(
+          [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          base64,
+          { timeoutMs: 45000 }
+        );
+
+        state.dialogueHistory = [
+          { role: 'system', content: systemPrompt },
+          { role: 'assistant', content: firstTurn },
+        ];
+        addBubble('lamp', firstTurn);
+        goStep(3);
+      } catch (e) {
+        showError('step-canvas', e.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '让 AI 看看';
+      }
+    }
+
+    // ==================== Step 3: 对话 ====================
+    function addBubble(role, content) {
+      const area = document.getElementById('dialogueArea');
+      const bubble = document.createElement('div');
+      bubble.className = `bubble bubble-${role}`;
+      bubble.textContent = content;
+      area.appendChild(bubble);
+      area.scrollTop = area.scrollHeight;
+      return bubble;
+    }
+
+    async function sendChat() {
+      const input = document.getElementById('chatInput');
+      const btn = document.getElementById('sendBtn');
+      const text = input.value.trim();
+      if (!text || btn.disabled) return;
+      btn.disabled = true;
+      input.value = '';
+      addBubble('user', text);
+      state.dialogueHistory.push({ role: 'user', content: text });
+
+      const typingBubble = addBubble('lamp', '');
+      typingBubble.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+
+      try {
+        // 用文本对话（不带图，省 token 更快），让 AI 接续对话
+        const reply = await qwenTextChat(state.dialogueHistory, { timeoutMs: 30000 });
+        typingBubble.textContent = reply;
+        state.dialogueHistory.push({ role: 'assistant', content: reply });
+
+        state.dialogueTurns++;
+        // 达到 3 轮 → 生成重构卡
+        if (state.dialogueTurns >= state.maxTurns) {
+          setTimeout(() => generateCards(), 800);
+        }
+      } catch (e) {
+        typingBubble.textContent = '（连接中断，请重试）';
+        showError('step-dialogue', e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ==================== Step 4: 重构卡（AI 真实生成） ====================
+    async function generateCards() {
+      goStep(4);
+      const list = document.getElementById('cardsList');
+      list.innerHTML = '<div class="loading"><div class="spinner"></div><div class="loading-text">AI 正在为你准备改变方向...</div></div>';
+
+      try {
+        const systemPrompt = '你是"小灯"，AI 心理陪伴者。根据对话内容，为用户生成 3 张"重构方案卡"，每张卡是一个温柔的小改变方向。只输出 JSON：{"cards":[{"id":"c1","title":"短标题","real_action":"现实里可以做的一件小事","image_action_desc":"画面上可以怎么改"}...共3张]}';
+        const userPrompt = `对话历史：\n${state.dialogueHistory.map(m => m.role + ':' + m.content).join('\n')}\n\n请生成 3 张重构方案卡。`;
+        const text = await qwenTextChat(
+          [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          { responseJson: true, timeoutMs: 45000 }
+        );
+        const data = parseJsonResponse(text);
+        state.cards = (data.cards || []).slice(0, 3);
+        if (state.cards.length === 0) {
+          // 兜底：硬编码 3 张
+          state.cards = [
+            { id: 'c1', title: '点亮一扇窗', real_action: '今晚睡前，留一盏小灯给自己', image_action_desc: '给房子的窗户加一束暖光' },
+            { id: 'c2', title: '种一棵新树', real_action: '本周种一盆小植物，照顾它', image_action_desc: '在画里再加一棵小树苗' },
+            { id: 'c3', title: '邀请一个人', real_action: '给一个想联系的人发一句话', image_action_desc: '在画里画一个走近房子的人' },
+          ];
+        }
+        renderCards();
+      } catch (e) {
+        // 失败兜底
+        state.cards = [
+          { id: 'c1', title: '点亮一扇窗', real_action: '今晚睡前，留一盏小灯给自己', image_action_desc: '给房子的窗户加一束暖光' },
+          { id: 'c2', title: '种一棵新树', real_action: '本周种一盆小植物，照顾它', image_action_desc: '在画里再加一棵小树苗' },
+          { id: 'c3', title: '邀请一个人', real_action: '给一个想联系的人发一句话', image_action_desc: '在画里画一个走近房子的人' },
+        ];
+        renderCards();
+      }
+    }
+
+    function renderCards() {
+      const list = document.getElementById('cardsList');
+      list.innerHTML = '';
+      state.cards.forEach(card => {
+        const el = document.createElement('div');
+        el.className = 'recon-card';
+        el.innerHTML = `
+          <div class="recon-card-title">${card.title}</div>
+          <div class="recon-card-desc">${card.real_action}</div>
+          <div class="recon-card-hint">画面：${card.image_action_desc}</div>
+        `;
+        el.onclick = () => selectCard(card, el);
+        list.appendChild(el);
+      });
+    }
+
+    function selectCard(card, el) {
+      document.querySelectorAll('.recon-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      state.selectedCard = card;
+      setTimeout(() => startGrounding(), 500);
+    }
+
+    // ==================== Step 5: grounding（AI 看画定位） ====================
+    let groundingCanvasEl, groundingCtx;
+    let groundingUndoStack = [];
+    let groundingTool = 'brush';
+
+    async function startGrounding() {
+      goStep(5);
+      await sleep(100);
+
+      groundingCanvasEl = document.getElementById('groundingCanvas');
+      const wrap = groundingCanvasEl.parentElement;
+      groundingCanvasEl.width = wrap.clientWidth;
+      groundingCanvasEl.height = wrap.clientHeight;
+      groundingCtx = groundingCanvasEl.getContext('2d');
+      groundingCtx.lineCap = 'round'; groundingCtx.lineJoin = 'round';
+
+      // 画上原图作为参考
+      if (state.originalCanvasData) {
+        const img = new Image();
+        img.onload = () => {
+          groundingCtx.drawImage(img, 0, 0, groundingCanvasEl.width, groundingCanvasEl.height);
+        };
+        img.src = state.originalCanvasData;
+      }
+
+      groundingCanvasEl.addEventListener('pointerdown', startGroundingDraw);
+      groundingCanvasEl.addEventListener('pointermove', drawGrounding);
+      groundingCanvasEl.addEventListener('pointerup', endGroundingDraw);
+      groundingCanvasEl.addEventListener('pointerleave', endGroundingDraw);
+
+      // 请求 AI 定位（看原图）
+      try {
+        const base64 = state.originalCanvasData.split(',')[1];
+        state.groundingImageBase64 = base64;
+        const systemPrompt = '你是房树人画作的视觉分析助手。用户会给你一幅画，并告诉你他想怎么改（image_action_desc）。请定位画里最适合改的位置。只输出 JSON：{"bbox":{"x":0.0,"y":0.0,"w":0.2,"h":0.2},"label":"短标签","guidance_prompt":"引导用户的话"}。bbox 是相对画布的归一化坐标（0-1）。';
+        const userPrompt = `用户想：${state.selectedCard.image_action_desc}。请在画上找一个适合的位置。`;
+        const text = await qwenVisionChat(
+          [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          base64,
+          { responseJson: true, timeoutMs: 45000 }
+        );
+        const data = parseJsonResponse(text);
+        if (data.bbox && data.bbox.x !== undefined) {
+          state.grounding = data;
+          document.getElementById('groundingPrompt').textContent = data.guidance_prompt || '在虚线框里画一画';
+          drawGroundingBox(data.bbox);
+        } else {
+          // 兜底：中间一个框
+          state.grounding = { bbox: { x: 0.3, y: 0.3, w: 0.4, h: 0.4 }, label: '在这里画', guidance_prompt: state.selectedCard.image_action_desc };
+          document.getElementById('groundingPrompt').textContent = state.grounding.guidance_prompt;
+          drawGroundingBox(state.grounding.bbox);
+        }
+      } catch (e) {
+        // 兜底
+        state.grounding = { bbox: { x: 0.3, y: 0.3, w: 0.4, h: 0.4 }, label: '在这里画', guidance_prompt: state.selectedCard.image_action_desc };
+        document.getElementById('groundingPrompt').textContent = state.grounding.guidance_prompt;
+        drawGroundingBox(state.grounding.bbox);
+      }
+    }
+
+    function drawGroundingBox(bbox) {
+      const svg = document.getElementById('groundingOverlay');
+      const x = bbox.x * 100, y = bbox.y * 100, w = bbox.w * 100, h = bbox.h * 100;
+      svg.innerHTML = `
+        <rect x="${x}%" y="${y}%" width="${w}%" height="${h}%"
+          fill="rgba(233,175,163,0.1)" stroke="#E9AFA3" stroke-width="2"
+          stroke-dasharray="12,12" style="animation: dash 1s linear infinite;" />
+        <text x="${x}%" y="${y - 2}%" font-size="14" fill="#3E3A39">${state.grounding.label || ''}</text>
+      `;
+    }
+
+    function startGroundingDraw(e) {
+      e.preventDefault();
+      groundingCanvasEl.setPointerCapture(e.pointerId);
+      isDrawing = true;
+      pushGroundingUndo();
+      groundingCtx.beginPath();
+      const rect = groundingCanvasEl.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (groundingCanvasEl.width / rect.width);
+      const y = (e.clientY - rect.top) * (groundingCanvasEl.height / rect.height);
+      groundingCtx.moveTo(x, y);
+    }
+    function drawGrounding(e) {
+      if (!isDrawing) return;
+      e.preventDefault();
+      const rect = groundingCanvasEl.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (groundingCanvasEl.width / rect.width);
+      const y = (e.clientY - rect.top) * (groundingCanvasEl.height / rect.height);
+      groundingCtx.globalCompositeOperation = 'source-over';
+      groundingCtx.strokeStyle = currentColor;
+      groundingCtx.lineWidth = currentSize;
+      groundingCtx.lineTo(x, y);
+      groundingCtx.stroke();
+    }
+    function endGroundingDraw(e) {
+      if (!isDrawing) return;
+      isDrawing = false;
+      if (e && e.pointerId !== undefined) {
+        try { groundingCanvasEl.releasePointerCapture(e.pointerId); } catch(_) {}
+      }
+    }
+    function pushGroundingUndo() {
+      try {
+        groundingUndoStack.push(groundingCtx.getImageData(0, 0, groundingCanvasEl.width, groundingCanvasEl.height));
+        if (groundingUndoStack.length > 30) groundingUndoStack.shift();
+      } catch(e) {}
+    }
+    function undoGrounding() {
+      if (groundingUndoStack.length > 0) groundingCtx.putImageData(groundingUndoStack.pop(), 0, 0);
+    }
+    function clearGroundingCanvas() {
+      pushGroundingUndo();
+      groundingCtx.fillStyle = 'white';
+      groundingCtx.fillRect(0, 0, groundingCanvasEl.width, groundingCanvasEl.height);
+    }
+    function setGroundingTool(tool) {
+      groundingTool = tool;
+      document.querySelectorAll('#step-grounding .tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+      const btn = document.querySelector(`#step-grounding .tool-btn[data-tool="${tool}"]`);
+      if (btn) btn.classList.add('active');
+    }
+
+    // ==================== Step 5 → Step 6: 提交修改 ====================
+    async function submitModification() {
+      const btn = document.getElementById('completeBtn');
+      btn.disabled = true;
+      btn.textContent = 'AI 正在看...';
+      goStep(6);
+      try {
+        const base64 = canvasToBase64(groundingCanvasEl);
+        const systemPrompt = '你是"小灯"，温暖的 AI 陪伴者。用户刚在画上做了一点修改（比如给窗户加了暖光）。请看修改后的画，给出温柔、具体、有文学感的反馈，肯定用户这一小步改变的勇气。只输出 JSON：{"warm_feedback":"80字以内的温暖反馈","growth_points":["安心感","连接感"],"summary":"一句话总结"}。growth_points 从这5个里选2个：安心感、连接感、能量感、自我感、恢复力。';
+        const userPrompt = `用户选择的改变方向：${state.selectedCard.title}（${state.selectedCard.real_action}）。请看修改后的画，给出反馈。`;
+        const text = await qwenVisionChat(
+          [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          base64,
+          { responseJson: true, timeoutMs: 45000 }
+        );
+        const data = parseJsonResponse(text);
+        // 兜底
+        if (!data.warm_feedback) {
+          data.warm_feedback = '你为画面添了这一点点改变，就像在生活里悄悄点亮了一束光。这种温柔的勇气，值得被看见。';
+          data.growth_points = ['安心感', '自我感'];
+          data.summary = '一小步改变，也是一次靠近自己。';
+        }
+        showGrowth(data);
+      } catch (e) {
+        // 兜底
+        showGrowth({
+          warm_feedback: '你为画面添了这一点点改变，就像在生活里悄悄点亮了一束光。这种温柔的勇气，值得被看见。',
+          growth_points: ['安心感', '自我感'],
+          summary: '一小步改变，也是一次靠近自己。',
+        });
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ==================== Step 6: 成长反馈 ====================
+    function showGrowth(outcome) {
+      const container = document.getElementById('growthContent');
+      const allPoints = ['安心感', '连接感', '能量感', '自我感', '恢复力'];
+      container.innerHTML = `
+        <div class="growth-feedback" id="feedbackText"></div>
+        <div class="growth-points" id="growthPoints">
+          ${allPoints.map(p => `<div class="growth-dot" data-point="${p}">${p}</div>`).join('')}
+        </div>
+        <div class="growth-summary" id="growthSummary"></div>
+        <button class="btn btn-primary" onclick="location.reload()">再画一次</button>
+      `;
+      typewrite(document.getElementById('feedbackText'), outcome.warm_feedback, () => {
+        (outcome.growth_points || []).forEach((point, i) => {
+          setTimeout(() => {
+            const dot = document.querySelector(`.growth-dot[data-point="${point}"]`);
+            if (dot) dot.classList.add('lit');
+          }, i * 300);
+        });
+        setTimeout(() => {
+          document.getElementById('growthSummary').textContent = outcome.summary || '';
+        }, (outcome.growth_points || []).length * 300 + 500);
+      });
+    }
+
+    function typewrite(el, text, onDone) {
+      if (!text) { onDone && onDone(); return; }
+      let i = 0;
+      const timer = setInterval(() => {
+        el.textContent = text.slice(0, i + 1);
+        i++;
+        if (i >= text.length) { clearInterval(timer); onDone && onDone(); }
+      }, 40);
+    }
+
+    // ==================== 工具函数 ====================
+    function showError(stepId, msg) {
+      // 浮动 toast，避免错误藏在 step 底部看不见
+      let toast = document.getElementById('errorToast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'errorToast';
+        toast.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#fef2f2;border:1px solid #D49B9B;color:#A55;max-width:90vw;padding:12px 16px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.18);z-index:9999;font-size:13px;line-height:1.5;';
+        document.body.appendChild(toast);
+      }
+      toast.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">⚠️ AI 调用出错</div><div style="word-break:break-word;">${String(msg).slice(0, 300)}</div><button class="btn btn-secondary" style="margin-top:8px;padding:6px 12px;font-size:12px;" onclick="document.getElementById('errorToast').remove()">关闭</button>`;
+      toast.style.display = 'block';
+      // 同时也写入 step（保留原行为）
+      const step = document.getElementById(stepId);
+      if (step) {
+        let errBox = step.querySelector('.error-box');
+        if (!errBox) {
+          errBox = document.createElement('div');
+          errBox.className = 'error-box';
+          step.appendChild(errBox);
+        }
+        errBox.innerHTML = `出错：${msg}<br><button class="btn btn-secondary" style="margin-top:8px;" onclick="this.parentElement.remove()">关闭</button>`;
+      }
+    }
+
+    // ==================== 初始化 ====================
+    window.addEventListener('load', () => {
+      initDrawingCanvas();
+      initColorPalette('colorPalette');
+      initColorPalette('groundingColorPalette');
+      initSizeOptions();
+      updateHUD();
+    });
+
+    window.addEventListener('resize', () => {
+      if (drawCanvas && state.step === 2) {
+        const data = drawCanvas.toDataURL();
+        initDrawingCanvas();
+        const img = new Image();
+        img.onload = () => drawCtx.drawImage(img, 0, 0, drawCanvas.width, drawCanvas.height);
+        img.src = data;
+      }
+    });
+  </script>
+</body>
+</html>
